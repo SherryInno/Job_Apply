@@ -90,6 +90,8 @@ app.post("/api/search/jobs", async (req, res) => {
     // Search for jobs matching the query
     const searchUrl = `https://remoteok.com/api?tag=${encodeURIComponent(query)}`;
     
+    console.log(`🔍 Searching RemoteOK with tag: ${query}`);
+    
     const response = await fetch(searchUrl, {
       method: "GET",
       headers: {
@@ -102,6 +104,7 @@ app.post("/api/search/jobs", async (req, res) => {
     }
 
     const data = await response.json();
+    console.log(`📊 API returned ${(data || []).length} total results`);
     
     // Filter and transform the jobs
     const jobs = (data || [])
@@ -115,15 +118,17 @@ app.post("/api/search/jobs", async (req, res) => {
         platform: "RemoteOK",
         salary: job.salary || "Not listed",
         posted: job.date_posted ? new Date(job.date_posted * 1000).toLocaleDateString() : "Recently",
-        tags: job.tags ? job.tags.split(',').slice(0, 4) : [],
+        tags: (job.tags ? job.tags.split(',').slice(0, 4).map(t => t.trim()) : []).filter(t => t),
         easyApply: false,
-        url: `https://remoteok.com/remote-jobs/${job.id}` || "",
+        url: job.url || `https://remoteok.com/l/${job.id}` || "",
         description: job.description || "",
       }));
 
+    console.log(`✅ Transformed to ${jobs.length} jobs`);
+    
     res.json(jobs);
   } catch (error) {
-    console.error("Error calling RemoteOK API:", error);
+    console.error("❌ Error calling RemoteOK API:", error);
     res.status(500).json({ 
       error: error.message || "Failed to search jobs"
     });
@@ -133,5 +138,5 @@ app.post("/api/search/jobs", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`);
-  console.log(`🔍 Job search: ${JSEARCH_API_KEY ? "✅ JSearch API configured" : "⚠️ JSearch API key not set"}`);
+  console.log(`🔍 Job search: Using RemoteOK API (completely free!)`);
 });
