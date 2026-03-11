@@ -77,7 +77,7 @@ app.post("/api/anthropic/v1/messages", async (req, res) => {
   }
 });
 
-// Job search endpoint using JSearch API (real job listings)
+// Job search endpoint using RemoteOK API (real job listings - completely free!)
 app.post("/api/search/jobs", async (req, res) => {
   const { query, location } = req.body;
 
@@ -85,65 +85,47 @@ app.post("/api/search/jobs", async (req, res) => {
     return res.status(400).json({ error: "Query is required" });
   }
 
-  if (!JSEARCH_API_KEY) {
-    return res.status(500).json({ 
-      error: "JSEARCH_API_KEY not configured",
-      hint: "Get a free API key from https://rapidapi.com/laimoon-laimoon/api/jsearch"
-    });
-  }
-
   try {
-    const searchQuery = location ? `${query} in ${location}` : query;
+    // RemoteOK API - free, no authentication needed
+    // Search for jobs matching the query
+    const searchUrl = `https://remoteok.com/api?tag=${encodeURIComponent(query)}`;
     
-    // Build query parameters for the URL
-    const params = new URLSearchParams({
-      query: searchQuery,
-      page: "1",
-      num_pages: "1",
-    });
-    
-    const response = await fetch(`https://jsearch.p.rapidapi.com/search?${params.toString()}`, {
+    const response = await fetch(searchUrl, {
       method: "GET",
       headers: {
-        "x-rapidapi-key": JSEARCH_API_KEY,
-        "x-rapidapi-host": "jsearch.p.rapidapi.com"
+        "User-Agent": "Mozilla/5.0 (compatible; JobApplyTool/1.0)"
       }
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error(`JSearch error: ${response.status} - ${error}`);
-      return res.status(500).json({ 
-        error: `Job search failed: ${error}`,
-        hint: "Check your JSEARCH_API_KEY"
-      });
+      throw new Error(`RemoteOK API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const jobs = (data.data || []).map(job => ({
-      id: job.job_id,
-      title: job.job_title,
-      company: job.employer_name,
-      location: job.job_location || "Remote",
-      platform: "JSsearch",
-      salary: job.job_salary_max && job.job_salary_min 
-        ? `$${job.job_salary_min}-${job.job_salary_max}`
-        : job.job_salary_max 
-        ? `$${job.job_salary_max}`
-        : "Not listed",
-      posted: job.job_posted_at_datetime_utc || "Recently",
-      tags: (job.job_required_skills || []).slice(0, 4),
-      easyApply: false,
-      url: job.job_apply_link || job.job_google_link || "",
-      description: job.job_description || "",
-    }));
+    
+    // Filter and transform the jobs
+    const jobs = (data || [])
+      .filter(job => job.position_type !== 'meta') // Remove metadata
+      .slice(0, 20) // Limit to 20 results
+      .map((job, i) => ({
+        id: job.id || i,
+        title: job.title || "Unknown",
+        company: job.company || "Unknown",
+        location: job.location || "Remote",
+        platform: "RemoteOK",
+        salary: job.salary || "Not listed",
+        posted: job.date_posted ? new Date(job.date_posted * 1000).toLocaleDateString() : "Recently",
+        tags: job.tags ? job.tags.split(',').slice(0, 4) : [],
+        easyApply: false,
+        url: `https://remoteok.com/remote-jobs/${job.id}` || "",
+        description: job.description || "",
+      }));
 
     res.json(jobs);
   } catch (error) {
-    console.error("Error calling JSearch API:", error);
+    console.error("Error calling RemoteOK API:", error);
     res.status(500).json({ 
-      error: error.message,
-      hint: "Make sure JSEARCH_API_KEY is set correctly"
+      error: error.message || "Failed to search jobs"
     });
   }
 });

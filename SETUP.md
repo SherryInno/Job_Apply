@@ -5,9 +5,8 @@
 - **Ollama** installed (free, open source)
   - Download from: https://ollama.ai
   - Or via Homebrew: `brew install ollama`
-- **FREE JSearch API key** (for real job listings)
-  - Sign up at: https://rapidapi.com
-  - Subscribe to [JSsearch API](https://rapidapi.com/laimoon-laimoon/api/jsearch) (free tier: 100 requests/month)
+
+(No additional API keys needed! We use RemoteOK API which is completely free)
 
 ## Installation
 
@@ -31,33 +30,14 @@
    ```
    It will listen on `http://localhost:11434`
 
-### Step 2: Set up JSearch API (for real job listings)
-
-1. **Sign up at RapidAPI**:
-   - Go to https://rapidapi.com and create a free account
-
-2. **Subscribe to JSsearch API**:
-   - Find [JSsearch API](https://rapidapi.com/laimoon-laimoon/api/jsearch)
-   - Click "Subscribe to Test" (free tier)
-
-3. **Get your API key**:
-   - Go to your [RapidAPI Dashboard](https://rapidapi.com/developer/dashboard)
-   - Find "JSsearch API" under "My Subscriptions"
-   - Copy your API key
-
-### Step 3: Configure the app
+### Step 2: Install dependencies
 
 1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-2. **Add your API key**:
-   - Edit `.env.local`
-   - Add your JSearch API key:
-   ```
-   JSEARCH_API_KEY=your_actual_api_key_here
-   ```
+No additional setup needed! RemoteOK API is free and requires no authentication.
 
 ## Running the App
 
@@ -120,25 +100,20 @@ To use a different open source model:
 
 - **Frontend:** React + Vite (runs on port 3000)
 - **Backend:** Express server (runs on port 3001)
-- **Job Search:** JSearch API - real job listings with actual URLs ✅
+- **Job Search:** RemoteOK API - real remote job listings, completely free, no API key needed ✅
 - **LLM:** Ollama - open source, runs locally, no additional API keys ✅
 - All API calls are proxied through the backend for security 🔒
 
 ## Troubleshooting
 
-**"Job search failed: JSearch API error"**
-- Make sure `JSEARCH_API_KEY` is set in `.env.local`
-- Check your API key at https://rapidapi.com/developer/dashboard
-- Verify you're subscribed to JSsearch API
+**"Job search failed" or "No jobs found"**
+- RemoteOK focuses on remote jobs, so generic keywords like "frontend" work best
+- Try searching for: "Frontend", "Backend", "Developer", "Engineer", "Designer"
+- Remote.co mirrors RemoteOK data, so results reflect remote positions
 
 **"Ollama API error"**
 - Make sure Ollama is running: `ollama serve`
 - Check that the model is installed: `ollama pull mistral`
-
-**No jobs found**
-- The free tier has 100 requests/month limit
-- Try a different search term
-- Upgrade your RapidAPI plan for more requests
 
 **Backend won't start**
 - Ensure port 3001 is not in use: `lsof -i :3001`
