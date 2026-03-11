@@ -95,17 +95,19 @@ app.post("/api/search/jobs", async (req, res) => {
   try {
     const searchQuery = location ? `${query} in ${location}` : query;
     
-    const response = await fetch("https://jsearch.p.rapidapi.com/search", {
+    // Build query parameters for the URL
+    const params = new URLSearchParams({
+      query: searchQuery,
+      page: "1",
+      num_pages: "1",
+    });
+    
+    const response = await fetch(`https://jsearch.p.rapidapi.com/search?${params.toString()}`, {
       method: "GET",
       headers: {
         "x-rapidapi-key": JSEARCH_API_KEY,
         "x-rapidapi-host": "jsearch.p.rapidapi.com"
-      },
-      body: new URLSearchParams({
-        query: searchQuery,
-        page: "1",
-        num_pages: "1",
-      })
+      }
     });
 
     if (!response.ok) {
