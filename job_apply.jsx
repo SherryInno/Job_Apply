@@ -256,7 +256,7 @@ export default function JobApplyTool() {
 
     try {
       // ── Pass 2: targeted rewrite with explicit missing-keyword mandate ─
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/anthropic/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -381,7 +381,7 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     const callClaude = async (messages, tools) => {
     const body = { model: "claude-sonnet-4-20250514", max_tokens: 4000, messages };
     if (tools) body.tools = tools;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/anthropic/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -556,7 +556,7 @@ Rules:
   const generateCoverLetter = async job => {
     setCoverLetterModal(job); setCoverLetter(""); setGeneratingCL(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/anthropic/v1/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000,
           messages: [{ role: "user", content: `Write a concise, compelling cover letter.\nJob: ${job.title} at ${job.company}\nLocation: ${job.location}\nSkills: ${job.tags.join(", ")}\nApplicant: ${profile.name}, ${profile.title}\nExperience: ${profile.experience}\nSkills: ${profile.skills}\nWrite 3 paragraphs. Specific, confident, no clichés, no placeholders.` }] })
@@ -583,7 +583,7 @@ Rules:
     for (const step of steps) { setEnhanceStep(step); await sleep(300); }
     try {
       const hasJD = jobDescText.trim().length > 20;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/anthropic/v1/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514", max_tokens: 2500,
