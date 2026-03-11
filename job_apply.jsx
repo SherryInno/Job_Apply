@@ -29,36 +29,41 @@ const LOCATION_SUGGESTIONS = [
 ];
 
 const getJobUrl = (job) => {
-  const title = encodeURIComponent(job.title);
-  const company = encodeURIComponent(job.company);
-  const companySlug = slug(job.company);
-  switch (job.platform) {
-    case "LinkedIn":
-      return `https://www.linkedin.com/jobs/search/?keywords=${title}+${company}&f_C=&origin=JOB_SEARCH_PAGE_KEYWORD_AUTOCOMPLETE`;
-    case "Indeed":
-      return `https://www.indeed.com/jobs?q=${title}+${company}`;
-    case "Greenhouse":
+  const title = encodeURIComponent(job.title || "");
+  const company = encodeURIComponent(job.company || "");
+  const companySlug = slug(job.company || "");
+  const location = encodeURIComponent(job.location || "");
+  const platform = (job.platform || "LinkedIn").toLowerCase().trim();
+
+  switch (platform) {
+    case "linkedin":
+      return `https://www.linkedin.com/jobs/search/?keywords=${title}+${company}`;
+    case "indeed":
+      return `https://www.indeed.com/jobs?q=${title}+${company}${location ? `&l=${location}` : ""}`;
+    case "greenhouse":
       return `https://boards.greenhouse.io/${companySlug}`;
-    case "Lever":
+    case "lever":
       return `https://jobs.lever.co/${companySlug}`;
-    case "Wellfound":
-      return `https://wellfound.com/company/${companySlug}/jobs`;
-    case "Glassdoor":
-      return `https://www.glassdoor.com/Jobs/${job.company.replace(/\s+/g,"-")}-Jobs-E0.htm`;
-    case "Dice":
-      return `https://www.dice.com/jobs?q=${title}&employer=${company}`;
-    case "ZipRecruiter":
-      return `https://www.ziprecruiter.com/jobs-search?search=${title}&company=${company}`;
-    case "Monster":
-      return `https://www.monster.com/jobs/search?q=${title}&where=${encodeURIComponent(job.location)}`;
-    case "Handshake":
-      return `https://app.joinhandshake.com/stu/jobs?query=${title}`;
-    case "Remote.co":
-      return `https://remote.co/remote-jobs/search/?search_keywords=${title}`;
-    case "YC":
+    case "wellfound":
+      return `https://wellfound.com/search?query=${title}`;
+    case "glassdoor":
+      return `https://www.glassdoor.com/Jobs/jobs.htm?suggestCount=0&suggestChosen=false&clickSource=searchBtn&sc.keyword=${title}`;
+    case "dice":
+      return `https://www.dice.com/jobs?q=${title}&company=${company}`;
+    case "ziprecruiter":
+      return `https://www.ziprecruiter.com/Jobs?search=${title}`;
+    case "monster":
+      return `https://www.monster.com/jobs/search?q=${title}${location ? `&where=${location}` : ""}`;
+    case "handshake":
+      return `https://app.joinhandshake.com/stu/jobs?search=${title}`;
+    case "remote.co":
+    case "remote co":
+      return `https://remote.co/remote-jobs/search?q=${title}`;
+    case "yc":
+    case "y combinator":
       return `https://www.workatastartup.com/jobs?q=${title}`;
     default:
-      return `https://www.google.com/search?q=${title}+${company}+jobs`;
+      return `https://www.google.com/search?q=${title}+${company}+${location}+jobs`;
   }
 };
 const STATUS_CONFIG = {
