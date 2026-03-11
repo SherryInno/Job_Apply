@@ -3,44 +3,67 @@ import cors from "cors";
 
 const app = express();
 const PORT = 3001;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
+const MODEL = process.env.OLLAMA_MODEL || "mistral";
 
 app.use(cors());
 app.use(express.json());
 
-// Proxy endpoint for Anthropic API
+// Proxy endpoint for Ollama API
 app.post("/api/anthropic/v1/messages", async (req, res) => {
-  if (!ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
-  }
-
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // Convert Anthropic API format to Ollama format
+    const messages = req.body.messages || [];
+    const prompt = messages.map(m => `${m.role}: ${m.content}`).join("\n");
+
+    const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(req.body),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        prompt: prompt,
+        stream: false,
+      }),
     });
 
-    const data = await response.json();
-    
     if (!response.ok) {
-      return res.status(response.status).json(data);
+      const error = await response.text();
+      console.error(`Ollama error: ${response.status} - ${error}`);
+      return res.status(500).json({ 
+        error: `Ollama API error: ${error || response.statusText}`,
+        hint: `Make sure Ollama is running at ${OLLAMA_API_URL} with model "${MODEL}"`
+      });
     }
 
-    res.json(data);
+    const data = await response.json();
+
+    // Convert Ollama response to Anthropic-compatible format
+    const anthropicResponse = {
+      content: [
+        {
+          type: "text",
+          text: data.response || "",
+        },
+      ],
+      model: MODEL,
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+      },
+    };
+
+    res.json(anthropicResponse);
   } catch (error) {
-    console.error("Error calling Anthropic API:", error);
-    res.status(500).json({ error: error.message });
+    console.error("Error calling Ollama API:", error);
+    res.status(500).json({ 
+      error: error.message,
+      hint: `Make sure Ollama is running at ${OLLAMA_API_URL}`
+    });
   }
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(
-    `📝 Make sure ANTHROPIC_API_KEY environment variable is set`
-  );
+  console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${MODEL}"`);
+  console.log(`💡 To change model: OLLAMA_MODEL=llama2 npm run dev:backend`);
 });
