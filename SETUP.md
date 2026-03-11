@@ -5,10 +5,15 @@
 - **Ollama** installed (free, open source)
   - Download from: https://ollama.ai
   - Or via Homebrew: `brew install ollama`
+- **FREE JSearch API key** (for real job listings)
+  - Sign up at: https://rapidapi.com
+  - Subscribe to [JSsearch API](https://rapidapi.com/laimoon-laimoon/api/jsearch) (free tier: 100 requests/month)
 
 ## Installation
 
-1. **Install Ollama** (if not already installed):
+### Step 1: Set up Ollama (for resume enhancement)
+
+1. **Install Ollama**:
    ```bash
    brew install ollama  # macOS
    # or download from https://ollama.ai
@@ -26,14 +31,33 @@
    ```
    It will listen on `http://localhost:11434`
 
-4. **Install dependencies**:
+### Step 2: Set up JSearch API (for real job listings)
+
+1. **Sign up at RapidAPI**:
+   - Go to https://rapidapi.com and create a free account
+
+2. **Subscribe to JSsearch API**:
+   - Find [JSsearch API](https://rapidapi.com/laimoon-laimoon/api/jsearch)
+   - Click "Subscribe to Test" (free tier)
+
+3. **Get your API key**:
+   - Go to your [RapidAPI Dashboard](https://rapidapi.com/developer/dashboard)
+   - Find "JSsearch API" under "My Subscriptions"
+   - Copy your API key
+
+### Step 3: Configure the app
+
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-5. **Configure Ollama** (optional):
-   - Copy `.env.example` to `.env.local` if you want to customize
-   - Default model is `mistral` - change `OLLAMA_MODEL` to use a different one
+2. **Add your API key**:
+   - Edit `.env.local`
+   - Add your JSearch API key:
+   ```
+   JSEARCH_API_KEY=your_actual_api_key_here
+   ```
 
 ## Running the App
 
@@ -59,6 +83,14 @@ npm run dev
 ```
 
 The app will open at `http://localhost:3000` with the backend running on port 3001 🚀
+
+## Features
+
+- **🔍 Real Job Search**: Uses JSearch API to find actual job openings with real URLs
+- **📄 Resume Enhancement**: Ollama-powered resume optimization for ATS
+- **✉️ Cover Letter Generation**: AI-generated cover letters tailored to each job
+- **⚡ Auto-Apply**: Apply to multiple jobs at once
+- **🎯 Resume Tailoring**: Auto-adjust resume for each job's keywords
 
 ## Switching Models
 
@@ -88,26 +120,32 @@ To use a different open source model:
 
 - **Frontend:** React + Vite (runs on port 3000)
 - **Backend:** Express server (runs on port 3001)
-- **LLM:** Ollama - open source, runs locally, no API keys needed ✅
-- API calls from the frontend are proxied through the backend to Ollama 🔒
+- **Job Search:** JSearch API - real job listings with actual URLs ✅
+- **LLM:** Ollama - open source, runs locally, no additional API keys ✅
+- All API calls are proxied through the backend for security 🔒
 
 ## Troubleshooting
 
-**"Ollama API error: unable to find image"**
-- Ollama is not running. Start it with: `ollama serve`
+**"Job search failed: JSearch API error"**
+- Make sure `JSEARCH_API_KEY` is set in `.env.local`
+- Check your API key at https://rapidapi.com/developer/dashboard
+- Verify you're subscribed to JSsearch API
 
-**"Model not found"**
-- Pull the model first: `ollama pull mistral`
+**"Ollama API error"**
+- Make sure Ollama is running: `ollama serve`
+- Check that the model is installed: `ollama pull mistral`
 
-**Responses are slow**
-- Try a faster, smaller model: `ollama pull orca-mini`
-- Ensure you have enough RAM (at least 8GB recommended)
+**No jobs found**
+- The free tier has 100 requests/month limit
+- Try a different search term
+- Upgrade your RapidAPI plan for more requests
 
 **Backend won't start**
 - Ensure port 3001 is not in use: `lsof -i :3001`
 - Check that express is installed: `npm list express`
 
 **Frontend can't connect to backend**
-- Check that the backend is running and accessible at `http://localhost:3001/api/anthropic/v1/messages`
+- Check that the backend is running and accessible at `http://localhost:3001`
 - Ensure `OLLAMA_API_URL` matches where Ollama is running (default: `http://localhost:11434`)
+
 

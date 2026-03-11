@@ -403,113 +403,41 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     setJobs([]);
     setSelectedJobs(new Set());
 
-    const platforms = selectedPlatforms.length ? selectedPlatforms : ["LinkedIn","Indeed","Greenhouse","Lever","Wellfound","Glassdoor","Dice","ZipRecruiter","Monster","Handshake","Remote.co","YC"];
-    const locationStr = locationQuery.trim() ? ` in ${locationQuery.trim()}` : "";
-
     try {
-      // ── Turn 1: web search to gather raw job data ──────────────────────
-      const searchPrompt = `Search for currently open "${q}"${locationStr} job listings on these platforms: ${platforms.slice(0,6).join(", ")}. Find real job postings with company names, locations, and URLs. List as many as you can find.`;
+      // Call the real job search API
+      const response = await fetch("/api/search/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: q,
+          location: locationQuery.trim() || undefined,
+        }),
+      });
 
-      const turn1 = await callClaude(
-        [{ role: "user", content: searchPrompt }],
-        [{ type: "web_search_20250305", name: "web_search" }]
-      );
-
-      // Build full conversation history including all tool use/result blocks
-      const assistantContent = turn1.content || [];
-      const messages = [
-        { role: "user", content: searchPrompt },
-        { role: "assistant", content: assistantContent },
-      ];
-
-      // If the model made tool calls, we need to add tool results and continue
-      const toolUseBlocks = assistantContent.filter(b => b.type === "tool_use");
-      if (toolUseBlocks.length > 0) {
-        // Add a user turn acknowledging the tool results (they are already in assistant content for server-side tools)
-        // For web_search (server-side), results are embedded — we just need the final text turn
-        // Check if there's already a text response
-        const hasText = assistantContent.some(b => b.type === "text" && b.text.trim().length > 50);
-        if (!hasText) {
-          // Need another turn to get the summary
-          messages.push({ role: "user", content: "Good. Now list all the jobs you found." });
-          const turn2 = await callClaude(messages, [{ type: "web_search_20250305", name: "web_search" }]);
-          messages.push({ role: "assistant", content: turn2.content || [] });
-        }
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Job search failed");
       }
 
-      // ── Turn 2 (final): extract all found info as clean JSON ───────────
-      const allText = messages
-        .flatMap(m => Array.isArray(m.content) ? m.content : [{ type: "text", text: m.content }])
-        .filter(b => b.type === "text")
-        .map(b => b.text)
-        .join("\n");
+      const jobs = await response.json();
 
-      const jsonTurn = await callClaude([
-        ...messages,
-        {
-          role: "user",
-          content: `Based on the job listings you just found, output a JSON array of all the jobs. 
-Respond with ONLY the JSON array, no other text, no markdown fences.
-Use exactly this shape for each job:
-{"id":1,"title":"","company":"","location":"","platform":"","salary":"","posted":"","match":85,"tags":["","",""],"easyApply":false,"url":""}
-
-Rules:
-- platform must be exactly one of: ${platforms.join(", ")}
-- salary: use the range shown, or "Not listed" 
-- posted: e.g. "2h ago", "1d ago", "Just posted"
-- match: integer 75-99 based on how well it matches "${q}"
-- tags: top 3 required skills from the listing
-- url: direct URL to the job listing (not a search page)
-- Include every job you found, up to 20`
-        }
-      ]);
-
-      const finalText = (jsonTurn.content || [])
-        .filter(b => b.type === "text")
-        .map(b => b.text)
-        .join("")
-        .trim();
-
-      // Robust JSON extraction — strip fences, find the array
-      const cleaned = finalText
-        .replace(/```json\s*/gi, "")
-        .replace(/```\s*/g, "")
-        .trim();
-
-      const arrayStart = cleaned.indexOf("[");
-      const arrayEnd = cleaned.lastIndexOf("]");
-
-      if (arrayStart === -1 || arrayEnd === -1) {
-        console.error("No JSON array found in:", finalText.slice(0, 300));
-        setSearchError("No jobs found for that search. Try a different role or location.");
-        setIsSearching(false);
-        return;
-      }
-
-      const parsed = JSON.parse(cleaned.slice(arrayStart, arrayEnd + 1));
-      const valid = parsed
+      // Process and score the jobs
+      const valid = jobs
         .filter(j => j.title && j.company)
-        .map((j, i) => {
-          const job = {
-            ...j,
-            id: i + 1,
-            platform: platforms.includes(j.platform) ? j.platform : (platforms[0] || "LinkedIn"),
-            salary: j.salary || "Not listed",
-            tags: Array.isArray(j.tags) ? j.tags.slice(0, 4) : [],
-            match: scoreMatch(j, resumeText),
-            easyApply: !!j.easyApply,
-          };
-          // Use getJobUrl to generate proper search URLs instead of relying on LLM-generated URLs
-          job.url = getJobUrl(job);
-          return job;
-        });
+        .map((j, i) => ({
+          ...j,
+          id: i + 1,
+          match: scoreMatch(j, resumeText),
+          tags: Array.isArray(j.tags) ? j.tags.filter(t => t).slice(0, 4) : [],
+        }));
 
       setJobs(valid);
-      if (valid.length === 0) setSearchError("No jobs found. Try a different role or location.");
-
+      if (valid.length === 0) {
+        setSearchError("No jobs found. Try a different role or location.");
+      }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(`Search failed: ${e.message}. Please try again.`);
+      setSearchError(`Search failed: ${e.message}. Make sure JSEARCH_API_KEY is configured on the backend.`);
     }
     setIsSearching(false);
   };
