@@ -178,8 +178,6 @@ function DiffView({ original, enhanced }) {
   );
 }
 
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
-
 export default function JobApplyTool() {
   const [view, setView] = useState("search");
 
@@ -257,15 +255,10 @@ export default function JobApplyTool() {
     const missingKeywords = allKeywords.filter(k => !baseLower.includes(k.toLowerCase()));
 
     try {
-      if (!API_KEY) throw new Error("API key not configured. Add VITE_ANTHROPIC_API_KEY to .env.local");
       // ── Pass 2: targeted rewrite with explicit missing-keyword mandate ─
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/anthropic/v1/messages", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-api-key": API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
@@ -386,19 +379,13 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
   };
 
     const callClaude = async (messages, tools) => {
-    if (!API_KEY) throw new Error("API key not configured. Add VITE_ANTHROPIC_API_KEY to .env.local");
     const body = { model: "claude-sonnet-4-20250514", max_tokens: 4000, messages };
     if (tools) body.tools = tools;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/anthropic/v1/messages", {
       method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
   };
 
@@ -569,13 +556,8 @@ Rules:
   const generateCoverLetter = async job => {
     setCoverLetterModal(job); setCoverLetter(""); setGeneratingCL(true);
     try {
-      if (!API_KEY) throw new Error("API key not configured. Add VITE_ANTHROPIC_API_KEY to .env.local");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { 
-          "Content-Type": "application/json",
-          "x-api-key": API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
+      const res = await fetch("/api/anthropic/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000,
           messages: [{ role: "user", content: `Write a concise, compelling cover letter.\nJob: ${job.title} at ${job.company}\nLocation: ${job.location}\nSkills: ${job.tags.join(", ")}\nApplicant: ${profile.name}, ${profile.title}\nExperience: ${profile.experience}\nSkills: ${profile.skills}\nWrite 3 paragraphs. Specific, confident, no clichés, no placeholders.` }] })
       });
@@ -600,14 +582,9 @@ Rules:
     ];
     for (const step of steps) { setEnhanceStep(step); await sleep(300); }
     try {
-      if (!API_KEY) throw new Error("API key not configured. Add VITE_ANTHROPIC_API_KEY to .env.local");
       const hasJD = jobDescText.trim().length > 20;
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { 
-          "Content-Type": "application/json",
-          "x-api-key": API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
+      const res = await fetch("/api/anthropic/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514", max_tokens: 2500,
           messages: [{ role: "user", content: `You are an expert resume writer and ATS specialist. Analyze and rewrite this resume.
