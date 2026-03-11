@@ -1,3 +1,4 @@
+import 'dotenv/config.js';
 import express from "express";
 import cors from "cors";
 
@@ -5,7 +6,7 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
-const JSEACH_API_KEY = process.env.JSEARCH_API_KEY;
+const JSEARCH_API_KEY = process.env.JSEARCH_API_KEY;
 
 app.use(cors());
 app.use(express.json());
@@ -71,7 +72,7 @@ app.post("/api/search/jobs", async (req, res) => {
     return res.status(400).json({ error: "Query is required" });
   }
 
-  if (!JSEACH_API_KEY) {
+  if (!JSEARCH_API_KEY) {
     return res.status(500).json({ 
       error: "JSEARCH_API_KEY not configured",
       hint: "Get a free API key from https://rapidapi.com/laimoon-laimoon/api/jsearch"
@@ -84,7 +85,7 @@ app.post("/api/search/jobs", async (req, res) => {
     const response = await fetch("https://jsearch.p.rapidapi.com/search", {
       method: "GET",
       headers: {
-        "x-rapidapi-key": JSEACH_API_KEY,
+        "x-rapidapi-key": JSEARCH_API_KEY,
         "x-rapidapi-host": "jsearch.p.rapidapi.com"
       },
       body: new URLSearchParams({
@@ -135,5 +136,5 @@ app.post("/api/search/jobs", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`);
-  console.log(`🔍 Job search: ${JSEACH_API_KEY ? "✅ JSearch API configured" : "⚠️ JSearch API key not set"}`);
+  console.log(`🔍 Job search: ${JSEARCH_API_KEY ? "✅ JSearch API configured" : "⚠️ JSearch API key not set"}`);
 });
