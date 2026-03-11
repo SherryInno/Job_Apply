@@ -484,16 +484,20 @@ Rules:
       const parsed = JSON.parse(cleaned.slice(arrayStart, arrayEnd + 1));
       const valid = parsed
         .filter(j => j.title && j.company)
-        .map((j, i) => ({
-          ...j,
-          id: i + 1,
-          platform: platforms.includes(j.platform) ? j.platform : (platforms[0] || "LinkedIn"),
-          salary: j.salary || "Not listed",
-          tags: Array.isArray(j.tags) ? j.tags.slice(0, 4) : [],
-          match: scoreMatch(j, resumeText),
-          easyApply: !!j.easyApply,
-          url: j.url || "",
-        }));
+        .map((j, i) => {
+          const job = {
+            ...j,
+            id: i + 1,
+            platform: platforms.includes(j.platform) ? j.platform : (platforms[0] || "LinkedIn"),
+            salary: j.salary || "Not listed",
+            tags: Array.isArray(j.tags) ? j.tags.slice(0, 4) : [],
+            match: scoreMatch(j, resumeText),
+            easyApply: !!j.easyApply,
+          };
+          // Use getJobUrl to generate proper search URLs instead of relying on LLM-generated URLs
+          job.url = getJobUrl(job);
+          return job;
+        });
 
       setJobs(valid);
       if (valid.length === 0) setSearchError("No jobs found. Try a different role or location.");
