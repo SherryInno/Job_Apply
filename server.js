@@ -1,12 +1,25 @@
-import 'dotenv/config.js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from "express";
 import cors from "cors";
+
+// Load environment variables
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env.local') });
 
 const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
 const JSEARCH_API_KEY = process.env.JSEARCH_API_KEY;
+
+// Debug: Log if API key is loaded
+console.log(`🔍 Checking env: JSEARCH_API_KEY = ${JSEARCH_API_KEY ? "✅ Loaded" : "❌ Not loaded"}`);
+if (!JSEARCH_API_KEY) {
+  console.warn("⚠️  JSEARCH_API_KEY not found in .env.local");
+  console.warn(`📝 Make sure .env.local exists at: ${path.join(__dirname, '.env.local')}`);
+}
 
 app.use(cors());
 app.use(express.json());
