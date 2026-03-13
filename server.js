@@ -13,12 +13,9 @@ const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
 
-// RapidAPI JSSearch configuration
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-
 console.log(`🚀 Job Apply Tool Backend Startup`);
 console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 JSSearch API: ${RAPIDAPI_KEY ? '✅ Configured' : '⚠️  Using fallback (add RAPIDAPI_KEY to .env.local)'}`);
+console.log(`💼 Job search: Jobicy API (free, no key required)`);
 
 app.use(cors());
 app.use(express.json());
@@ -87,8 +84,9 @@ const REALISTIC_JOBS = [
     location: "San Francisco, CA / Remote",
     salary: "$150,000 - $220,000",
     posted: "2 days ago",
+    platform: "LinkedIn",
     tags: ["React", "TypeScript", "Node.js"],
-    url: "https://techjobs.example.com/senior-frontend-1",
+    url: "",
     description: "Looking for a Senior Frontend Engineer with 5+ years experience in React and modern JavaScript. You'll lead our frontend architecture."
   },
   {
@@ -98,8 +96,9 @@ const REALISTIC_JOBS = [
     location: "New York, NY / Remote",
     salary: "$120,000 - $160,000",
     posted: "1 day ago",
+    platform: "Indeed",
     tags: ["React", "Python", "PostgreSQL"],
-    url: "https://startupsearch.com/fullstack-dev",
+    url: "",
     description: "Join our growing startup building the future of fintech. We need a full stack developer proficient in React, Python, and databases."
   },
   {
@@ -109,8 +108,9 @@ const REALISTIC_JOBS = [
     location: "Austin, TX / Remote",
     salary: "$130,000 - $180,000",
     posted: "3 days ago",
+    platform: "Greenhouse",
     tags: ["Python", "Django", "AWS"],
-    url: "https://datasystemsjobs.com/python-backend",
+    url: "",
     description: "Build scalable backend systems using Python and Django. Experience with AWS and cloud infrastructure required."
   },
   {
@@ -120,8 +120,9 @@ const REALISTIC_JOBS = [
     location: "Mountain View, CA / Remote",
     salary: "$160,000 - $200,000",
     posted: "1 day ago",
+    platform: "LinkedIn",
     tags: ["Product Strategy", "Analytics", "Leadership"],
-    url: "https://aijoins.com/pm-role",
+    url: "",
     description: "Lead product vision for our AI platform. You'll work with engineering and design teams to deliver innovative AI features."
   },
   {
@@ -131,8 +132,9 @@ const REALISTIC_JOBS = [
     location: "Seattle, WA / Remote",
     salary: "$140,000 - $190,000",
     posted: "2 days ago",
+    platform: "Indeed",
     tags: ["Kubernetes", "Docker", "AWS"],
-    url: "https://cloudscalejobs.com/devops",
+    url: "",
     description: "Design and maintain our cloud infrastructure. Kubernetes, Docker, and AWS expertise essential."
   },
   {
@@ -142,8 +144,9 @@ const REALISTIC_JOBS = [
     location: "Los Angeles, CA / Remote",
     salary: "$100,000 - $150,000",
     posted: "Just posted",
+    platform: "Wellfound",
     tags: ["React", "Next.js", "CSS"],
-    url: "https://creativejobs.com/react-dev",
+    url: "",
     description: "Join our design-focused team building beautiful web experiences. Strong React and CSS skills required."
   },
   {
@@ -153,8 +156,9 @@ const REALISTIC_JOBS = [
     location: "Chicago, IL / Remote",
     salary: "$130,000 - $170,000",
     posted: "4 days ago",
+    platform: "Glassdoor",
     tags: ["Python", "Machine Learning", "SQL"],
-    url: "https://analyticsjobs.com/ds-engineer",
+    url: "",
     description: "Build ML pipelines and data models. Python, scikit-learn, and SQL expertise needed."
   },
   {
@@ -164,13 +168,14 @@ const REALISTIC_JOBS = [
     location: "Boston, MA / Remote",
     salary: "$120,000 - $160,000",
     posted: "3 days ago",
+    platform: "LinkedIn",
     tags: ["Swift", "iOS", "Objective-C"],
-    url: "https://appworksjobs.com/ios-dev",
+    url: "",
     description: "Develop iOS applications using Swift. Experience with modern iOS development patterns required."
   }
 ];
 
-// Job search endpoint using Adzuna API (free job aggregator)
+// Job search endpoint using Jobicy API (free, no key required)
 app.post("/api/search/jobs", async (req, res) => {
   const { query, location } = req.body;
 
@@ -179,100 +184,66 @@ app.post("/api/search/jobs", async (req, res) => {
   }
 
   try {
-    console.log(`🔍 Searching JSSearch API for: "${query}"`);
-    
-    // RapidAPI JSSearch - free job search API
-    // Sign up for free at: https://rapidapi.com/laimoon-laimoon/api/jsearch
-    if (!RAPIDAPI_KEY) {
-      console.warn("⚠️ RAPIDAPI_KEY not configured, using sample data fallback");
-      throw new Error("RAPIDAPI_KEY not configured");
-    }
-    
-    const searchUrl = "https://jsearch.p.rapidapi.com/search";
+    console.log(`🔍 Searching Jobicy API for: "${query}"`);
+
     const queryParams = new URLSearchParams({
-      query: query,
-      page: "1",
-      num_pages: "1"
+      count: "20",
+      tag: query,
     });
 
     if (location?.trim()) {
-      queryParams.append("location", location);
+      queryParams.append("geo", location);
     }
 
-    console.log(`📡 Requesting JSSearch API for: ${query}${location ? ` in ${location}` : ""}`);
-    
-    try {
-      const response = await fetch(`${searchUrl}?${queryParams.toString()}`, {
-        method: "GET",
-        headers: {
-          "x-rapidapi-key": RAPIDAPI_KEY,
-          "x-rapidapi-host": "jsearch.p.rapidapi.com"
-        }
-      });
+    const response = await fetch(`https://jobicy.com/api/v2/remote-jobs?${queryParams.toString()}`, {
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ JSSearch API returned ${response.status}`);
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`📊 JSSearch returned ${(data.data || []).length} jobs`);
-      
-      // Transform JSSearch API response to our format
-      const jobs = (data.data || [])
-        .slice(0, 20)
-        .map((job, i) => ({
-          id: job.job_id || i,
-          title: job.job_title || "Unknown",
-          company: job.employer_name || "Unknown",
-          location: job.job_location || "Location not specified",
-          platform: job.job_employment_type || "Full-time",
-          salary: job.job_salary_currency && job.job_min_salary && job.job_max_salary
-            ? `${job.job_salary_currency}${job.job_min_salary?.toLocaleString()} - ${job.job_salary_currency}${job.job_max_salary?.toLocaleString()}`
-            : "Not listed",
-          posted: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString() : "Recently",
-          tags: job.job_required_skills ? job.job_required_skills.slice(0, 3) : [],
-          easyApply: job.job_apply_is_direct || false,
-          url: job.job_apply_link || job.job_google_link || "",
-          description: job.job_description ? job.job_description.substring(0, 500) : "",
-        }));
-
-      console.log(`✅ Transformed to ${jobs.length} jobs from JSSearch`);
-      
-      res.json(jobs);
-    } catch (jsearchError) {
-      // Fallback to sample data if JSSearch API fails
-      console.warn(`⚠️ JSSearch API error: ${jsearchError.message}`);
-      console.warn(`📝 Using sample data fallback instead`);
-      
-      const queryLower = query.toLowerCase();
-      const filtered = REALISTIC_JOBS.filter(job => 
-        job.title.toLowerCase().includes(queryLower) ||
-        job.tags.some(tag => tag.toLowerCase().includes(queryLower))
-      );
-
-      const results = filtered.length > 0 ? filtered : REALISTIC_JOBS.slice(0, 6);
-      
-      res.json(results);
+    if (!response.ok) {
+      throw new Error(`Jobicy API error: ${response.status}`);
     }
+
+    const data = await response.json();
+    const rawJobs = data.jobs || [];
+    console.log(`📊 Jobicy returned ${rawJobs.length} jobs`);
+
+    const jobs = rawJobs.map((job, i) => ({
+      id: job.id || i,
+      title: job.jobTitle?.replace(/&amp;#\d+;/g, "–").replace(/&amp;/g, "&") || "Unknown",
+      company: job.companyName || "Unknown",
+      location: job.jobGeo || "Remote",
+      platform: "LinkedIn",
+      salary: job.annualSalaryMin && job.annualSalaryMax
+        ? `${job.salaryCurrency || "$"}${Number(job.annualSalaryMin).toLocaleString()} - ${job.salaryCurrency || "$"}${Number(job.annualSalaryMax).toLocaleString()}`
+        : "Not listed",
+      posted: job.pubDate ? new Date(job.pubDate).toLocaleDateString() : "Recently",
+      tags: Array.isArray(job.jobIndustry)
+        ? job.jobIndustry.map(t => t.replace(/&amp;/g, "&")).slice(0, 3)
+        : [],
+      easyApply: false,
+      url: job.url || "",
+      description: job.jobDescription ? job.jobDescription.replace(/<[^>]*>/g, "").substring(0, 500) : "",
+    }));
+
+    console.log(`✅ Returning ${jobs.length} real jobs from Jobicy`);
+    res.json(jobs);
+
   } catch (error) {
-    console.error("❌ Error in job search:", error);
-    
-    // Fallback to sample data on any error
+    console.error("❌ Jobicy API error:", error.message);
+    console.warn("📝 Falling back to sample data");
+
     const queryLower = query.toLowerCase();
-    const filtered = REALISTIC_JOBS.filter(job => 
+    const filtered = REALISTIC_JOBS.filter(job =>
       job.title.toLowerCase().includes(queryLower) ||
       job.tags.some(tag => tag.toLowerCase().includes(queryLower))
     );
-
-    const results = filtered.length > 0 ? filtered : REALISTIC_JOBS.slice(0, 6);
-    res.json(results);
+    res.json(filtered.length > 0 ? filtered : REALISTIC_JOBS.slice(0, 6));
   }
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`);
-  console.log(`💼 Job search: Using JSSearch API (RapidAPI with fallback to sample data)`);
+  console.log(`💼 Job search: Jobicy API (free, no key required)`);
 });
