@@ -12,12 +12,123 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
-const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
-const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 
 console.log(`🚀 Job Apply Tool Backend Startup`);
 console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 Job search: ${ADZUNA_APP_ID ? "✅ Adzuna API (real listings)" : "⚠️  Adzuna key missing — get a free key at developer.adzuna.com"}`);
+console.log(`💼 Job search: We Work Remotely + Remotive RSS feeds (free, no key needed)`);
+
+// ── RSS parser ────────────────────────────────────────────────────────────────
+function parseRSSItems(xml) {
+  const items = [];
+  const blocks = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+  for (const block of blocks) {
+    const get = (tag) => {
+      const m = block.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([^<]*))</${tag}>`));
+      return m ? (m[1] ?? m[2] ?? "").trim() : "";
+    };
+    // <link> in RSS is text node between tags (not CDATA)
+    const linkMatch = block.match(/<link>([^<]+)<\/link>/);
+    items.push({
+      title:       get("title"),
+      link:        linkMatch ? linkMatch[1].trim() : get("guid"),
+      pubDate:     get("pubDate"),
+      skills:      get("skills"),
+      region:      get("region"),
+      category:    get("category"),
+      description: get("description").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
+    });
+  }
+  return items;
+}
+
+// We Work Remotely category feeds
+const WWR_FEEDS = {
+  product:     "https://weworkremotely.com/categories/remote-product-jobs.rss",
+  management:  "https://weworkremotely.com/categories/remote-management-jobs.rss",
+  engineering: "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+  design:      "https://weworkremotely.com/categories/remote-design-jobs.rss",
+  data:        "https://weworkremotely.com/categories/remote-data-science-jobs.rss",
+  devops:      "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss",
+  all:         "https://weworkremotely.com/remote-jobs.rss",
+};
+
+function pickFeeds(query) {
+  const q = query.toLowerCase();
+  if (/product|pm\b|roadmap/.test(q))                      return ["product", "management"];
+  if (/engineer|develop|frontend|backend|fullstack|node|react|python|java/.test(q)) return ["engineering"];
+  if (/design|ux|ui|figma/.test(q))                        return ["design"];
+  if (/data|ml|machine learning|analytics|scientist/.test(q)) return ["data"];
+  if (/devops|sre|infra|kubernetes|docker|cloud/.test(q))  return ["devops"];
+  if (/manager|director|vp|lead|head of/.test(q))          return ["management", "product"];
+  return ["all"];
+}
+
+async function fetchWWR(query) {
+  const feeds = pickFeeds(query);
+  const results = await Promise.allSettled(
+    feeds.map(f => fetch(WWR_FEEDS[f], { headers: { "User-Agent": "JobApplyTool/1.0" } })
+      .then(r => r.ok ? r.text() : Promise.reject(r.status)))
+  );
+  const queryLower = query.toLowerCase();
+  const jobs = [];
+  let id = 1;
+
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    const items = parseRSSItems(r.value);
+    for (const item of items) {
+      if (!item.title || !item.link) continue;
+      // Title format: "Company Name: Job Title"
+      const colonIdx = item.title.indexOf(": ");
+      const company = colonIdx > -1 ? item.title.slice(0, colonIdx).trim() : "Unknown";
+      const title   = colonIdx > -1 ? item.title.slice(colonIdx + 2).trim() : item.title;
+
+      // Filter by keyword relevance
+      const searchable = `${title} ${item.skills} ${item.category} ${item.description}`.toLowerCase();
+      if (!searchable.includes(queryLower) && !queryLower.split(" ").some(w => w.length > 3 && searchable.includes(w))) continue;
+
+      const tags = item.skills
+        ? item.skills.split(",").map(s => s.trim()).filter(Boolean).slice(0, 4)
+        : [item.category].filter(Boolean);
+
+      jobs.push({
+        id: id++,
+        title,
+        company,
+        location: item.region || "Remote",
+        platform: "LinkedIn",
+        salary: "Not listed",
+        posted: item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recently",
+        tags,
+        easyApply: false,
+        url: item.link,
+        description: item.description.substring(0, 500),
+      });
+    }
+  }
+  return jobs;
+}
+
+async function fetchRemotive(query) {
+  try {
+    const r = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}&limit=20`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.jobs || []).map((job, i) => ({
+      id: 1000 + i,
+      title: job.title || "Unknown",
+      company: job.company_name || "Unknown",
+      location: job.candidate_required_location || "Remote",
+      platform: "LinkedIn",
+      salary: job.salary || "Not listed",
+      posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
+      tags: (job.tags || []).slice(0, 4),
+      easyApply: false,
+      url: job.url || "",
+      description: (job.description || "").replace(/<[^>]*>/g, " ").substring(0, 500),
+    }));
+  } catch { return []; }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -177,77 +288,34 @@ const REALISTIC_JOBS = [
   }
 ];
 
-// Job search endpoint using Adzuna API (real listings from LinkedIn, Indeed, Glassdoor etc.)
+// Job search — We Work Remotely RSS + Remotive API (free, no key needed)
 app.post("/api/search/jobs", async (req, res) => {
-  const { query, location } = req.body;
-
-  if (!query) {
-    return res.status(400).json({ error: "Query is required" });
-  }
-
-  if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
-    return res.status(503).json({
-      error: "Adzuna API key not configured. Get a free key at developer.adzuna.com and add ADZUNA_APP_ID and ADZUNA_APP_KEY to .env.local"
-    });
-  }
+  const { query } = req.body;
+  if (!query) return res.status(400).json({ error: "Query is required" });
 
   try {
-    console.log(`🔍 Searching Adzuna for: "${query}"${location ? ` in ${location}` : ""}`);
+    console.log(`🔍 Searching RSS feeds for: "${query}"`);
+    const [wwrJobs, remotiveJobs] = await Promise.all([fetchWWR(query), fetchRemotive(query)]);
 
-    const queryParams = new URLSearchParams({
-      app_id: ADZUNA_APP_ID,
-      app_key: ADZUNA_APP_KEY,
-      results_per_page: "20",
-      what: query,
-      content_type: "application/json",
-    });
+    // Merge, deduplicate by title+company, limit to 20
+    const seen = new Set();
+    const all = [...wwrJobs, ...remotiveJobs].filter(j => {
+      const key = `${j.title}|${j.company}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 20);
 
-    if (location?.trim()) {
-      queryParams.append("where", location);
-    }
-
-    const country = "us";
-    const response = await fetch(
-      `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${queryParams.toString()}`,
-      { headers: { "Accept": "application/json" } }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Adzuna API error ${response.status}: ${err}`);
-    }
-
-    const data = await response.json();
-    const rawJobs = data.results || [];
-    console.log(`📊 Adzuna returned ${rawJobs.length} jobs`);
-
-    const jobs = rawJobs.map((job, i) => ({
-      id: job.id || i,
-      title: job.title || "Unknown",
-      company: job.company?.display_name || "Unknown",
-      location: job.location?.display_name || location || "Unknown",
-      platform: "LinkedIn",
-      salary: job.salary_min && job.salary_max
-        ? `$${Math.round(job.salary_min).toLocaleString()} - $${Math.round(job.salary_max).toLocaleString()}`
-        : "Not listed",
-      posted: job.created ? new Date(job.created).toLocaleDateString() : "Recently",
-      tags: job.category?.label ? [job.category.label] : [],
-      easyApply: false,
-      url: job.redirect_url || "",
-      description: job.description ? job.description.substring(0, 500) : "",
-    }));
-
-    console.log(`✅ Returning ${jobs.length} real jobs from Adzuna`);
-    res.json(jobs);
-
+    console.log(`✅ Returning ${all.length} real jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive)`);
+    res.json(all.length > 0 ? all : REALISTIC_JOBS.slice(0, 6));
   } catch (error) {
-    console.error("❌ Adzuna API error:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("❌ Job search error:", error.message);
+    res.json(REALISTIC_JOBS.slice(0, 6));
   }
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`);
-  console.log(`💼 Job search: ${ADZUNA_APP_ID ? "Adzuna API ✅" : "⚠️  Add ADZUNA_APP_ID + ADZUNA_APP_KEY to .env.local (free at developer.adzuna.com)"}`);
+  console.log(`💼 Job search: We Work Remotely + Remotive RSS (free, no key needed)`);
 });
