@@ -12,10 +12,12 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
+const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
+const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 
 console.log(`🚀 Job Apply Tool Backend Startup`);
 console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 Job search: Jobicy API (free, no key required)`);
+console.log(`💼 Job search: ${ADZUNA_APP_ID ? "✅ Adzuna API (real listings)" : "⚠️  Adzuna key missing — get a free key at developer.adzuna.com"}`);
 
 app.use(cors());
 app.use(express.json());
@@ -175,7 +177,7 @@ const REALISTIC_JOBS = [
   }
 ];
 
-// Job search endpoint using Jobicy API (free, no key required)
+// Job search endpoint using Adzuna API (real listings from LinkedIn, Indeed, Glassdoor etc.)
 app.post("/api/search/jobs", async (req, res) => {
   const { query, location } = req.body;
 
@@ -183,67 +185,69 @@ app.post("/api/search/jobs", async (req, res) => {
     return res.status(400).json({ error: "Query is required" });
   }
 
+  if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
+    return res.status(503).json({
+      error: "Adzuna API key not configured. Get a free key at developer.adzuna.com and add ADZUNA_APP_ID and ADZUNA_APP_KEY to .env.local"
+    });
+  }
+
   try {
-    console.log(`🔍 Searching Jobicy API for: "${query}"`);
+    console.log(`🔍 Searching Adzuna for: "${query}"${location ? ` in ${location}` : ""}`);
 
     const queryParams = new URLSearchParams({
-      count: "20",
-      tag: query,
+      app_id: ADZUNA_APP_ID,
+      app_key: ADZUNA_APP_KEY,
+      results_per_page: "20",
+      what: query,
+      content_type: "application/json",
     });
 
     if (location?.trim()) {
-      queryParams.append("geo", location);
+      queryParams.append("where", location);
     }
 
-    const response = await fetch(`https://jobicy.com/api/v2/remote-jobs?${queryParams.toString()}`, {
-      method: "GET",
-      headers: { "Accept": "application/json" }
-    });
+    const country = "us";
+    const response = await fetch(
+      `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${queryParams.toString()}`,
+      { headers: { "Accept": "application/json" } }
+    );
 
     if (!response.ok) {
-      throw new Error(`Jobicy API error: ${response.status}`);
+      const err = await response.text();
+      throw new Error(`Adzuna API error ${response.status}: ${err}`);
     }
 
     const data = await response.json();
-    const rawJobs = data.jobs || [];
-    console.log(`📊 Jobicy returned ${rawJobs.length} jobs`);
+    const rawJobs = data.results || [];
+    console.log(`📊 Adzuna returned ${rawJobs.length} jobs`);
 
     const jobs = rawJobs.map((job, i) => ({
       id: job.id || i,
-      title: job.jobTitle?.replace(/&amp;#\d+;/g, "–").replace(/&amp;/g, "&") || "Unknown",
-      company: job.companyName || "Unknown",
-      location: job.jobGeo || "Remote",
+      title: job.title || "Unknown",
+      company: job.company?.display_name || "Unknown",
+      location: job.location?.display_name || location || "Unknown",
       platform: "LinkedIn",
-      salary: job.annualSalaryMin && job.annualSalaryMax
-        ? `${job.salaryCurrency || "$"}${Number(job.annualSalaryMin).toLocaleString()} - ${job.salaryCurrency || "$"}${Number(job.annualSalaryMax).toLocaleString()}`
+      salary: job.salary_min && job.salary_max
+        ? `$${Math.round(job.salary_min).toLocaleString()} - $${Math.round(job.salary_max).toLocaleString()}`
         : "Not listed",
-      posted: job.pubDate ? new Date(job.pubDate).toLocaleDateString() : "Recently",
-      tags: Array.isArray(job.jobIndustry)
-        ? job.jobIndustry.map(t => t.replace(/&amp;/g, "&")).slice(0, 3)
-        : [],
+      posted: job.created ? new Date(job.created).toLocaleDateString() : "Recently",
+      tags: job.category?.label ? [job.category.label] : [],
       easyApply: false,
-      url: job.url || "",
-      description: job.jobDescription ? job.jobDescription.replace(/<[^>]*>/g, "").substring(0, 500) : "",
+      url: job.redirect_url || "",
+      description: job.description ? job.description.substring(0, 500) : "",
     }));
 
-    console.log(`✅ Returning ${jobs.length} real jobs from Jobicy`);
+    console.log(`✅ Returning ${jobs.length} real jobs from Adzuna`);
     res.json(jobs);
 
   } catch (error) {
-    console.error("❌ Jobicy API error:", error.message);
-    console.warn("📝 Falling back to sample data");
-
-    const queryLower = query.toLowerCase();
-    const filtered = REALISTIC_JOBS.filter(job =>
-      job.title.toLowerCase().includes(queryLower) ||
-      job.tags.some(tag => tag.toLowerCase().includes(queryLower))
-    );
-    res.json(filtered.length > 0 ? filtered : REALISTIC_JOBS.slice(0, 6));
+    console.error("❌ Adzuna API error:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Using Ollama at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`);
-  console.log(`💼 Job search: Jobicy API (free, no key required)`);
+  console.log(`💼 Job search: ${ADZUNA_APP_ID ? "Adzuna API ✅" : "⚠️  Add ADZUNA_APP_ID + ADZUNA_APP_KEY to .env.local (free at developer.adzuna.com)"}`);
 });
