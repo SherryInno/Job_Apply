@@ -12,10 +12,15 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
+const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID;
+const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
+
+const adzunaEnabled = !!(ADZUNA_APP_ID && ADZUNA_APP_KEY);
 
 console.log(`🚀 Job Apply Tool Backend Startup`);
 console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 Job search: We Work Remotely + Remotive RSS feeds (free, no key needed)`);
+console.log(`💼 Sources: We Work Remotely + Remotive + The Muse${adzunaEnabled ? " + Adzuna (LinkedIn/Indeed/Glassdoor)" : ""}`);
+if (!adzunaEnabled) console.log(`💡 Tip: Add ADZUNA_APP_ID/KEY to .env.local for LinkedIn & Indeed jobs (free at developer.adzuna.com)`);
 
 // ── RSS parser ────────────────────────────────────────────────────────────────
 function parseRSSItems(xml) {
@@ -101,7 +106,7 @@ async function fetchWWR(query) {
         title,
         company,
         location: item.region || "Remote",
-        platform: "LinkedIn",
+        platform: "Remote.co",
         salary: "Not listed",
         posted: item.pubDate ? new Date(item.pubDate).toLocaleDateString() : "Recently",
         tags,
@@ -133,7 +138,7 @@ async function fetchRemotive(query) {
         title: job.title || "Unknown",
         company: job.company_name || "Unknown",
         location: job.candidate_required_location || "Remote",
-        platform: "LinkedIn",
+        platform: "Remote.co",
         salary: job.salary || "Not listed",
         posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
         tags: (job.tags || []).slice(0, 4),
@@ -141,6 +146,88 @@ async function fetchRemotive(query) {
         url: job.url || "",
         description: (job.description || "").replace(/<[^>]*>/g, " ").substring(0, 500),
       }));
+  } catch { return []; }
+}
+
+// The Muse category mapping (free public API, no key needed)
+const MUSE_CATEGORIES = {
+  "product":    "Product Management",
+  "engineer":   "Software Engineering",
+  "develop":    "Software Engineering",
+  "frontend":   "Software Engineering",
+  "backend":    "Software Engineering",
+  "fullstack":  "Software Engineering",
+  "data":       "Data Science",
+  "design":     "Design & UX",
+  "devops":     "DevOps",
+  "marketing":  "Marketing & PR",
+  "sales":      "Sales",
+  "finance":    "Finance",
+};
+
+function pickMuseCategory(query) {
+  const q = query.toLowerCase();
+  for (const [kw, cat] of Object.entries(MUSE_CATEGORIES)) {
+    if (q.includes(kw)) return cat;
+  }
+  return null; // no category filter — let title filter handle it
+}
+
+async function fetchMuse(query) {
+  try {
+    const category = pickMuseCategory(query);
+    const url = category
+      ? `https://www.themuse.com/api/public/jobs?category=${encodeURIComponent(category)}&page=1`
+      : `https://www.themuse.com/api/public/jobs?page=1`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const data = await r.json();
+    const queryLower = query.toLowerCase();
+    const words = queryLower.split(/\s+/).filter(w => w.length > 3);
+    return (data.results || [])
+      .filter(job => {
+        const t = (job.name || "").toLowerCase();
+        return t.includes(queryLower) || (words.length > 0 && words.every(w => t.includes(w)));
+      })
+      .map((job, i) => ({
+        id: 2000 + i,
+        title: job.name || "Unknown",
+        company: job.company?.name || "Unknown",
+        location: job.locations?.map(l => l.name).join(", ") || "Remote",
+        platform: "The Muse",
+        salary: "Not listed",
+        posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
+        tags: (job.categories || []).map(c => c.name).slice(0, 3),
+        easyApply: false,
+        url: job.refs?.landing_page || "",
+        description: (job.contents || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 500),
+      }));
+  } catch { return []; }
+}
+
+// Adzuna — optional, aggregates LinkedIn/Indeed/Glassdoor (free key at developer.adzuna.com)
+async function fetchAdzuna(query) {
+  if (!adzunaEnabled) return [];
+  try {
+    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=15&what=${encodeURIComponent(query)}&content-type=application/json`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.results || []).map((job, i) => ({
+      id: 3000 + i,
+      title: job.title || "Unknown",
+      company: job.company?.display_name || "Unknown",
+      location: job.location?.display_name || "Remote",
+      platform: "Indeed",    // Adzuna primarily aggregates from Indeed + other boards
+      salary: job.salary_min && job.salary_max
+        ? `$${Math.round(job.salary_min/1000)}k - $${Math.round(job.salary_max/1000)}k`
+        : "Not listed",
+      posted: job.created ? new Date(job.created).toLocaleDateString() : "Recently",
+      tags: [job.category?.label].filter(Boolean),
+      easyApply: false,
+      url: job.redirect_url || "",
+      description: (job.description || "").substring(0, 500),
+    }));
   } catch { return []; }
 }
 
@@ -302,25 +389,27 @@ const REALISTIC_JOBS = [
   }
 ];
 
-// Job search — We Work Remotely RSS + Remotive API (free, no key needed)
+// Job search — We Work Remotely + Remotive + The Muse + optional Adzuna
 app.post("/api/search/jobs", async (req, res) => {
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: "Query is required" });
 
   try {
-    console.log(`🔍 Searching RSS feeds for: "${query}"`);
-    const [wwrJobs, remotiveJobs] = await Promise.all([fetchWWR(query), fetchRemotive(query)]);
+    console.log(`🔍 Searching for: "${query}"`);
+    const [wwrJobs, remotiveJobs, museJobs, adzunaJobs] = await Promise.all([
+      fetchWWR(query), fetchRemotive(query), fetchMuse(query), fetchAdzuna(query),
+    ]);
 
-    // Merge, deduplicate by title+company, limit to 20
+    // Merge, deduplicate by title+company, limit to 30
     const seen = new Set();
-    const all = [...wwrJobs, ...remotiveJobs].filter(j => {
+    const all = [...wwrJobs, ...remotiveJobs, ...museJobs, ...adzunaJobs].filter(j => {
       const key = `${j.title}|${j.company}`.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    }).slice(0, 20);
+    }).slice(0, 30);
 
-    console.log(`✅ Returning ${all.length} real jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive)`);
+    console.log(`✅ Returning ${all.length} jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive + ${museJobs.length} Muse + ${adzunaJobs.length} Adzuna)`);
     res.json(all.length > 0 ? all : REALISTIC_JOBS.slice(0, 6));
   } catch (error) {
     console.error("❌ Job search error:", error.message);

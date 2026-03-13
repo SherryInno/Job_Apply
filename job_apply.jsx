@@ -4,10 +4,12 @@ const PLATFORM_COLORS = {
   LinkedIn: "#0A66C2", Indeed: "#2164F3", Greenhouse: "#24A148", Lever: "#6B3FE5",
   Wellfound: "#FF6154", Glassdoor: "#0CAA41", Dice: "#E8532A", ZipRecruiter: "#00A664",
   Monster: "#6E00B4", Handshake: "#E8473F", "Remote.co": "#00AACC", YC: "#FF6600",
+  "The Muse": "#FF5B5B",
 };
 const PLATFORM_LABELS = {
   Wellfound: "Wellfound", Glassdoor: "Glassdoor", Dice: "Dice", ZipRecruiter: "ZipRecruiter",
   Monster: "Monster", Handshake: "Handshake", "Remote.co": "Remote.co", YC: "Y Combinator",
+  "The Muse": "The Muse",
 };
 
 const slug = str => str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -62,6 +64,8 @@ const getJobUrl = (job) => {
     case "yc":
     case "y combinator":
       return `https://www.workatastartup.com/jobs?q=${title}`;
+    case "the muse":
+      return `https://www.themuse.com/jobs?q=${title}`;
     default:
       return `https://www.google.com/search?q=${title}+${company}+${location}+jobs`;
   }
@@ -200,7 +204,7 @@ export default function JobApplyTool() {
   const [locationQuery, setLocationQuery] = useState("Toronto");
   const [showRoleSuggestions, setShowRoleSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
-  const ALL_PLATFORMS = ["LinkedIn", "Indeed", "Greenhouse", "Lever", "Wellfound", "Glassdoor", "Dice", "ZipRecruiter", "Monster", "Handshake", "Remote.co", "YC"];
+  const ALL_PLATFORMS = ["LinkedIn", "Indeed", "Greenhouse", "Lever", "Wellfound", "Glassdoor", "Dice", "ZipRecruiter", "Monster", "Handshake", "Remote.co", "YC", "The Muse"];
   const [selectedPlatforms, setSelectedPlatforms] = useState(ALL_PLATFORMS);
   const [minMatch, setMinMatch] = useState(50); // Start lower to show more results initially
   const [jobs, setJobs] = useState([]);
