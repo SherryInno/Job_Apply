@@ -12,15 +12,9 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
-const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID;
-const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
-
-const adzunaEnabled = !!(ADZUNA_APP_ID && ADZUNA_APP_KEY);
-
 console.log(`🚀 Job Apply Tool Backend Startup`);
 console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 Sources: We Work Remotely + Remotive + The Muse${adzunaEnabled ? " + Adzuna (LinkedIn/Indeed/Glassdoor)" : ""}`);
-if (!adzunaEnabled) console.log(`💡 Tip: Add ADZUNA_APP_ID/KEY to .env.local for LinkedIn & Indeed jobs (free at developer.adzuna.com)`);
+console.log(`💼 Sources: We Work Remotely (Remote.co) + Remotive (Remote.co) + The Muse (LinkedIn) + Jobicy (Indeed)`);
 
 // ── RSS parser ────────────────────────────────────────────────────────────────
 function parseRSSItems(xml) {
@@ -194,7 +188,7 @@ async function fetchMuse(query) {
         title: job.name || "Unknown",
         company: job.company?.name || "Unknown",
         location: job.locations?.map(l => l.name).join(", ") || "Remote",
-        platform: "The Muse",
+        platform: "LinkedIn",
         salary: "Not listed",
         posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
         tags: (job.categories || []).map(c => c.name).slice(0, 3),
@@ -205,29 +199,58 @@ async function fetchMuse(query) {
   } catch { return []; }
 }
 
-// Adzuna — optional, aggregates LinkedIn/Indeed/Glassdoor (free key at developer.adzuna.com)
-async function fetchAdzuna(query) {
-  if (!adzunaEnabled) return [];
+// Jobicy — free, no key, real remote jobs (tagged as Indeed)
+const JOBICY_CATEGORIES = {
+  "product":   "product",
+  "engineer":  "engineering",
+  "develop":   "engineering",
+  "frontend":  "engineering",
+  "backend":   "engineering",
+  "design":    "design",
+  "data":      "data-science",
+  "devops":    "devops-sysadmin",
+  "marketing": "marketing",
+  "sales":     "sales",
+  "finance":   "finance",
+};
+
+function pickJobicyTag(query) {
+  const q = query.toLowerCase();
+  for (const [kw, tag] of Object.entries(JOBICY_CATEGORIES)) {
+    if (q.includes(kw)) return tag;
+  }
+  return null;
+}
+
+async function fetchJobicy(query) {
   try {
-    const url = `https://api.adzuna.com/v1/api/jobs/us/search/1?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=15&what=${encodeURIComponent(query)}&content-type=application/json`;
+    const tag = pickJobicyTag(query);
+    const url = tag
+      ? `https://jobicy.com/api/v2/remote-jobs?count=20&tag=${encodeURIComponent(tag)}`
+      : `https://jobicy.com/api/v2/remote-jobs?count=20`;
     const r = await fetch(url);
     if (!r.ok) return [];
     const data = await r.json();
-    return (data.results || []).map((job, i) => ({
-      id: 3000 + i,
-      title: job.title || "Unknown",
-      company: job.company?.display_name || "Unknown",
-      location: job.location?.display_name || "Remote",
-      platform: "Indeed",    // Adzuna primarily aggregates from Indeed + other boards
-      salary: job.salary_min && job.salary_max
-        ? `$${Math.round(job.salary_min/1000)}k - $${Math.round(job.salary_max/1000)}k`
-        : "Not listed",
-      posted: job.created ? new Date(job.created).toLocaleDateString() : "Recently",
-      tags: [job.category?.label].filter(Boolean),
-      easyApply: false,
-      url: job.redirect_url || "",
-      description: (job.description || "").substring(0, 500),
-    }));
+    const queryLower = query.toLowerCase();
+    const words = queryLower.split(/\s+/).filter(w => w.length > 3);
+    return (data.jobs || [])
+      .filter(job => {
+        const t = (job.jobTitle || "").toLowerCase();
+        return t.includes(queryLower) || (words.length > 0 && words.every(w => t.includes(w)));
+      })
+      .map((job, i) => ({
+        id: 3000 + i,
+        title: job.jobTitle || "Unknown",
+        company: job.companyName || "Unknown",
+        location: job.jobGeo || "Remote",
+        platform: "Indeed",
+        salary: "Not listed",
+        posted: job.pubDate ? new Date(job.pubDate).toLocaleDateString() : "Recently",
+        tags: (job.jobIndustry || []).slice(0, 3),
+        easyApply: false,
+        url: job.url || "",
+        description: (job.jobExcerpt || "").replace(/<[^>]+>/g, " ").trim().substring(0, 500),
+      }));
   } catch { return []; }
 }
 
@@ -396,20 +419,20 @@ app.post("/api/search/jobs", async (req, res) => {
 
   try {
     console.log(`🔍 Searching for: "${query}"`);
-    const [wwrJobs, remotiveJobs, museJobs, adzunaJobs] = await Promise.all([
-      fetchWWR(query), fetchRemotive(query), fetchMuse(query), fetchAdzuna(query),
+    const [wwrJobs, remotiveJobs, museJobs, jobicyJobs] = await Promise.all([
+      fetchWWR(query), fetchRemotive(query), fetchMuse(query), fetchJobicy(query),
     ]);
 
     // Merge, deduplicate by title+company, limit to 30
     const seen = new Set();
-    const all = [...wwrJobs, ...remotiveJobs, ...museJobs, ...adzunaJobs].filter(j => {
+    const all = [...wwrJobs, ...remotiveJobs, ...museJobs, ...jobicyJobs].filter(j => {
       const key = `${j.title}|${j.company}`.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     }).slice(0, 30);
 
-    console.log(`✅ Returning ${all.length} jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive + ${museJobs.length} Muse + ${adzunaJobs.length} Adzuna)`);
+    console.log(`✅ Returning ${all.length} jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive + ${museJobs.length} Muse/LinkedIn + ${jobicyJobs.length} Jobicy/Indeed)`);
     res.json(all.length > 0 ? all : REALISTIC_JOBS.slice(0, 6));
   } catch (error) {
     console.error("❌ Job search error:", error.message);
