@@ -383,7 +383,7 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     return Math.min(98, Math.max(55, rawScore + 30));
   };
 
-    const callClaude = async (messages, tools) => {
+  const callClaude = async (messages, tools) => {
     const body = { model: "claude-sonnet-4-20250514", max_tokens: 4000, messages };
     if (tools) body.tools = tools;
     const res = await fetch("/api/anthropic/v1/messages", {
@@ -437,7 +437,7 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
       }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(`Search failed: ${e.message}. Make sure JSEARCH_API_KEY is configured on the backend.`);
+      setSearchError(`Search failed: ${e.message}. Make sure RAPIDAPI_KEY is configured on the backend.`);
     }
     setIsSearching(false);
   };
@@ -771,7 +771,7 @@ Return ONLY valid JSON, no markdown backticks:
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <button style={S.secBtn} onClick={selectAll}>{selectedJobs.size===filteredJobs.length && filteredJobs.length>0 ?"Deselect All":"Select All"}</button>
-                  <button style={{ ...S.primaryBtn, opacity: selectedJobs.size===0||isRunning?.4:1 }} onClick={runAutoApply} disabled={selectedJobs.size===0||isRunning}>
+                  <button style={{ ...S.primaryBtn, opacity: selectedJobs.size===0||isRunning ? 0.4 : 1 }} onClick={runAutoApply} disabled={selectedJobs.size===0||isRunning}>
                     {isRunning ? "⚡ APPLYING..." : `⚡ AUTO-APPLY (${selectedJobs.size})`}
                   </button>
                 </div>
@@ -910,7 +910,7 @@ Return ONLY valid JSON, no markdown backticks:
             {/* Action bar */}
             <div style={{ padding:"10px 18px",borderBottom:"1px solid #1A1A1F",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0D0D0F",flexShrink:0 }}>
               <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-                <button style={{ ...S.primaryBtn, opacity: isEnhancing||!resumeText.trim()?.5:1 }}
+                <button style={{ ...S.primaryBtn, opacity: isEnhancing||!resumeText.trim() ? 0.5 : 1 }}
                   onClick={enhanceResume} disabled={isEnhancing||!resumeText.trim()}>
                   {isEnhancing ? "⚡ ENHANCING..." : "⚡ ENHANCE RESUME"}
                 </button>

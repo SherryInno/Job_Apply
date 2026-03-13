@@ -154,7 +154,7 @@ const REALISTIC_JOBS = [
     salary: "$130,000 - $170,000",
     posted: "4 days ago",
     tags: ["Python", "Machine Learning", "SQL"],
-    url: "https://analyticsjo bs.com/ds-engineer",
+    url: "https://analyticsjobs.com/ds-engineer",
     description: "Build ML pipelines and data models. Python, scikit-learn, and SQL expertise needed."
   },
   {
