@@ -53,13 +53,14 @@ const WWR_FEEDS = {
 };
 
 function pickFeeds(query) {
+  // Always include "all" for broad coverage; add specific categories for better precision
   const q = query.toLowerCase();
-  if (/product|pm\b|roadmap/.test(q))                      return ["product", "management"];
-  if (/engineer|develop|frontend|backend|fullstack|node|react|python|java/.test(q)) return ["engineering"];
-  if (/design|ux|ui|figma/.test(q))                        return ["design"];
-  if (/data|ml|machine learning|analytics|scientist/.test(q)) return ["data"];
-  if (/devops|sre|infra|kubernetes|docker|cloud/.test(q))  return ["devops"];
-  if (/manager|director|vp|lead|head of/.test(q))          return ["management", "product"];
+  if (/product|pm\b|roadmap/.test(q))                      return ["all", "product", "management"];
+  if (/engineer|develop|frontend|backend|fullstack|node|react|python|java/.test(q)) return ["all", "engineering"];
+  if (/design|ux|ui|figma/.test(q))                        return ["all", "design"];
+  if (/data|ml|machine learning|analytics|scientist/.test(q)) return ["all", "data"];
+  if (/devops|sre|infra|kubernetes|docker|cloud/.test(q))  return ["all", "devops"];
+  if (/manager|director|vp|lead|head of/.test(q))          return ["all", "management"];
   return ["all"];
 }
 
@@ -83,9 +84,13 @@ async function fetchWWR(query) {
       const company = colonIdx > -1 ? item.title.slice(0, colonIdx).trim() : "Unknown";
       const title   = colonIdx > -1 ? item.title.slice(colonIdx + 2).trim() : item.title;
 
-      // Filter by keyword relevance
-      const searchable = `${title} ${item.skills} ${item.category} ${item.description}`.toLowerCase();
-      if (!searchable.includes(queryLower) && !queryLower.split(" ").some(w => w.length > 3 && searchable.includes(w))) continue;
+      // Filter by keyword relevance — title takes priority, fall back to exact phrase in full text
+      const titleLower = title.toLowerCase();
+      const words = queryLower.split(/\s+/).filter(w => w.length > 3);
+      const titleMatches = titleLower.includes(queryLower) || (words.length > 0 && words.every(w => titleLower.includes(w)));
+      const searchable = `${title} ${item.category} ${item.description}`.toLowerCase();
+      const exactBodyMatch = searchable.includes(queryLower);  // exact phrase in body only
+      if (!titleMatches && !exactBodyMatch) continue;
 
       const tags = item.skills
         ? item.skills.split(",").map(s => s.trim()).filter(Boolean).slice(0, 4)
@@ -111,22 +116,31 @@ async function fetchWWR(query) {
 
 async function fetchRemotive(query) {
   try {
-    const r = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}&limit=20`);
+    // Remotive searches exact phrases; use first significant word for broader recall
+    const searchTerm = query.split(/\s+/).find(w => w.length > 3) || query;
+    const r = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(searchTerm)}&limit=30`);
     if (!r.ok) return [];
     const data = await r.json();
-    return (data.jobs || []).map((job, i) => ({
-      id: 1000 + i,
-      title: job.title || "Unknown",
-      company: job.company_name || "Unknown",
-      location: job.candidate_required_location || "Remote",
-      platform: "LinkedIn",
-      salary: job.salary || "Not listed",
-      posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
-      tags: (job.tags || []).slice(0, 4),
-      easyApply: false,
-      url: job.url || "",
-      description: (job.description || "").replace(/<[^>]*>/g, " ").substring(0, 500),
-    }));
+    const queryLower = query.toLowerCase();
+    const words = queryLower.split(/\s+/).filter(w => w.length > 3);
+    return (data.jobs || [])
+      .filter(job => {
+        const t = (job.title || "").toLowerCase();
+        return t.includes(queryLower) || (words.length > 0 && words.every(w => t.includes(w)));
+      })
+      .map((job, i) => ({
+        id: 1000 + i,
+        title: job.title || "Unknown",
+        company: job.company_name || "Unknown",
+        location: job.candidate_required_location || "Remote",
+        platform: "LinkedIn",
+        salary: job.salary || "Not listed",
+        posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
+        tags: (job.tags || []).slice(0, 4),
+        easyApply: false,
+        url: job.url || "",
+        description: (job.description || "").replace(/<[^>]*>/g, " ").substring(0, 500),
+      }));
   } catch { return []; }
 }
 
