@@ -187,7 +187,7 @@ async function fetchMuse(query) {
         title: job.name || "Unknown",
         company: job.company?.name || "Unknown",
         location: job.locations?.map(l => l.name).join(", ") || "Remote",
-        platform: "LinkedIn",
+        platform: "The Muse",
         salary: "Not listed",
         posted: job.publication_date ? new Date(job.publication_date).toLocaleDateString() : "Recently",
         tags: (job.categories || []).map(c => c.name).slice(0, 3),

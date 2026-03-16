@@ -204,7 +204,7 @@ export default function JobApplyTool() {
   const [locationQuery, setLocationQuery] = useState("Toronto");
   const [showRoleSuggestions, setShowRoleSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
-  const ALL_PLATFORMS = ["LinkedIn", "Indeed", "Greenhouse", "Lever", "Wellfound", "Glassdoor", "Dice", "ZipRecruiter", "Monster", "Handshake", "Remote.co", "YC"];
+  const ALL_PLATFORMS = ["The Muse", "Indeed", "Greenhouse", "Lever", "Wellfound", "Glassdoor", "Dice", "ZipRecruiter", "Monster", "Handshake", "Remote.co", "YC"];
   const [selectedPlatforms, setSelectedPlatforms] = useState(ALL_PLATFORMS);
   const [minMatch, setMinMatch] = useState(50); // Start lower to show more results initially
   const [jobs, setJobs] = useState([]);
