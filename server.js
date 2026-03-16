@@ -452,7 +452,7 @@ const REALISTIC_JOBS = [
 
 // Job search — We Work Remotely + Remotive + The Muse + optional Adzuna
 app.post("/api/search/jobs", async (req, res) => {
-  const { query } = req.body;
+  const { query, location } = req.body;
   if (!query) return res.status(400).json({ error: "Query is required" });
 
   try {
