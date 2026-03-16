@@ -257,56 +257,56 @@ async function fetchJobicy(query) {
 app.use(cors());
 app.use(express.json());
 
-// Proxy endpoint for Ollama API (for resume enhancement and cover letters)
+// Proxy endpoint — forwards to Groq API (OpenAI-compatible), returns Anthropic-shaped response
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 app.post("/api/anthropic/v1/messages", async (req, res) => {
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ error: "GROQ_API_KEY is not set in .env.local" });
+  }
   try {
-    // Convert Anthropic API format to Ollama format
-    const messages = req.body.messages || [];
-    const prompt = messages.map(m => `${m.role}: ${m.content}`).join("\n");
+    // Convert Anthropic message format → OpenAI/Groq format
+    const messages = (req.body.messages || []).map(m => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content
+        : Array.isArray(m.content)
+          ? m.content.filter(b => b.type === "text").map(b => b.text).join("\n")
+          : String(m.content),
+    }));
 
-    const response = await fetch(`${OLLAMA_API_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt: prompt,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`Ollama error: ${response.status} - ${error}`);
-      return res.status(500).json({ 
-        error: `Ollama API error: ${error || response.statusText}`,
-        hint: `Make sure Ollama is running at ${OLLAMA_API_URL} with model "${OLLAMA_MODEL}"`
-      });
-    }
-
-    const data = await response.json();
-
-    // Convert Ollama response to Anthropic-compatible format
-    const anthropicResponse = {
-      content: [
-        {
-          type: "text",
-          text: data.response || "",
-        },
-      ],
-      model: OLLAMA_MODEL,
-      usage: {
-        input_tokens: 0,
-        output_tokens: 0,
-      },
+    const groqBody = {
+      model: GROQ_MODEL,
+      max_tokens: req.body.max_tokens || 4000,
+      messages,
     };
 
-    res.json(anthropicResponse);
-  } catch (error) {
-    console.error("Error calling Ollama API:", error);
-    res.status(500).json({ 
-      error: error.message,
-      hint: `Make sure Ollama is running at ${OLLAMA_API_URL}`
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify(groqBody),
     });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("Groq API error:", data);
+      return res.status(response.status).json({ error: data.error?.message || "Groq API error" });
+    }
+
+    // Convert OpenAI response → Anthropic-shaped response (frontend expects content[0].text)
+    res.json({
+      content: [{ type: "text", text: data.choices?.[0]?.message?.content || "" }],
+      model: GROQ_MODEL,
+      usage: {
+        input_tokens: data.usage?.prompt_tokens || 0,
+        output_tokens: data.usage?.completion_tokens || 0,
+      },
+    });
+  } catch (error) {
+    console.error("Error calling Groq API:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

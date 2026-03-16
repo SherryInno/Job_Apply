@@ -366,12 +366,6 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     const resumeLower = resume.toLowerCase();
     const jobText = (job.title + " " + (job.tags || []).join(" ") + " " + (job.description || "")).toLowerCase();
 
-    // Sherry's core skill tokens extracted from her resume
-    const resumeKeywords = resumeLower
-      .split(/[\s,|•\-\/]+/)
-      .map(w => w.replace(/[^a-z0-9]/g, ""))
-      .filter(w => w.length > 3);
-
     const jobKeywords = jobText
       .split(/[\s,|•\-\/]+/)
       .map(w => w.replace(/[^a-z0-9]/g, ""))
@@ -387,16 +381,6 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     return Math.min(98, Math.max(55, rawScore + 30));
   };
 
-  const callClaude = async (messages, tools) => {
-    const body = { model: "claude-sonnet-4-20250514", max_tokens: 4000, messages };
-    if (tools) body.tools = tools;
-    const res = await fetch("/api/anthropic/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.json();
-  };
 
   const searchJobs = async () => {
     const q = searchQuery.trim();
@@ -408,7 +392,6 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
     setSelectedJobs(new Set());
 
     try {
-      // Call the real job search API
       const response = await fetch("/api/search/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -425,7 +408,6 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
 
       const jobs = await response.json();
 
-      // Process and score the jobs
       const valid = jobs
         .filter(j => j.title && j.company)
         .map((j, i) => ({
@@ -441,7 +423,7 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
       }
     } catch (e) {
       console.error("Search error:", e);
-      setSearchError(`Search failed: ${e.message}. Make sure RAPIDAPI_KEY is configured on the backend.`);
+      setSearchError(`Search failed: ${e.message}`);
     }
     setIsSearching(false);
   };
