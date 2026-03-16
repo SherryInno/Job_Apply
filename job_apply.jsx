@@ -402,8 +402,10 @@ Return ONLY the plain-text resume. Zero preamble, zero commentary.`
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Job search failed");
+        const text = await response.text();
+        let msg = "Job search failed";
+        try { msg = JSON.parse(text).error || msg; } catch {}
+        throw new Error(msg);
       }
 
       const jobs = await response.json();
