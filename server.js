@@ -12,9 +12,10 @@ const app = express();
 const PORT = 3001;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
+const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID || "";
+const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || "";
 console.log(`🚀 Job Apply Tool Backend Startup`);
-console.log(`📝 Ollama: ${OLLAMA_API_URL} (model: ${OLLAMA_MODEL})`);
-console.log(`💼 Sources: We Work Remotely (Remote.co) + Remotive (Remote.co) + The Muse (LinkedIn) + Jobicy (Indeed)`);
+console.log(`💼 Sources: WWR + Remotive + The Muse + Jobicy${ADZUNA_APP_ID ? " + Adzuna ✅" : " (add ADZUNA_APP_ID/KEY to .env.local for LinkedIn/Indeed results)"}`);
 
 // ── RSS parser ────────────────────────────────────────────────────────────────
 function parseRSSItems(xml) {
@@ -254,6 +255,43 @@ async function fetchJobicy(query) {
   } catch { return []; }
 }
 
+// Adzuna — real listings aggregated from LinkedIn, Indeed, Glassdoor etc.
+async function fetchAdzuna(query, location) {
+  if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) return [];
+  try {
+    const params = new URLSearchParams({
+      app_id: ADZUNA_APP_ID,
+      app_key: ADZUNA_APP_KEY,
+      results_per_page: "20",
+      what: query,
+      content_type: "application/json",
+    });
+    if (location?.trim()) params.append("where", location);
+
+    const country = location?.toLowerCase().includes("canada") ? "ca" : "us";
+    const r = await fetch(`https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.results || []).map((job, i) => ({
+      id: 4000 + i,
+      title: job.title || "Unknown",
+      company: job.company?.display_name || "Unknown",
+      location: job.location?.display_name || location || "Unknown",
+      platform: "LinkedIn",
+      salary: job.salary_min && job.salary_max
+        ? `$${Math.round(job.salary_min).toLocaleString()} - $${Math.round(job.salary_max).toLocaleString()}`
+        : "Not listed",
+      posted: job.created ? new Date(job.created).toLocaleDateString() : "Recently",
+      tags: job.category?.label ? [job.category.label] : [],
+      easyApply: false,
+      url: job.redirect_url || "",
+      description: (job.description || "").substring(0, 500),
+    }));
+  } catch { return []; }
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -418,25 +456,26 @@ app.post("/api/search/jobs", async (req, res) => {
   if (!query) return res.status(400).json({ error: "Query is required" });
 
   try {
-    console.log(`🔍 Searching for: "${query}"`);
-    const [wwrJobs, remotiveJobs, museJobs, jobicyJobs] = await Promise.all([
-      fetchWWR(query), fetchRemotive(query), fetchMuse(query), fetchJobicy(query),
+    console.log(`🔍 Searching for: "${query}"${location ? ` in ${location}` : ""}`);
+    const [wwrJobs, remotiveJobs, museJobs, jobicyJobs, adzunaJobs] = await Promise.all([
+      fetchWWR(query), fetchRemotive(query), fetchMuse(query), fetchJobicy(query), fetchAdzuna(query, location),
     ]);
 
-    // Merge, deduplicate by title+company, limit to 30
+    // Merge, deduplicate by title+company, limit to 40
     const seen = new Set();
-    const all = [...wwrJobs, ...remotiveJobs, ...museJobs, ...jobicyJobs].filter(j => {
+    const all = [...adzunaJobs, ...wwrJobs, ...remotiveJobs, ...museJobs, ...jobicyJobs].filter(j => {
       const key = `${j.title}|${j.company}`.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    }).slice(0, 30);
+    }).slice(0, 40);
 
-    console.log(`✅ Returning ${all.length} jobs (${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive + ${museJobs.length} Muse/LinkedIn + ${jobicyJobs.length} Jobicy/Indeed)`);
-    res.json(all.length > 0 ? all : REALISTIC_JOBS.slice(0, 6));
+    console.log(`✅ Returning ${all.length} jobs (${adzunaJobs.length} Adzuna + ${wwrJobs.length} WWR + ${remotiveJobs.length} Remotive + ${museJobs.length} Muse + ${jobicyJobs.length} Jobicy)`);
+    if (all.length === 0) return res.status(404).json({ error: "No jobs found. Try a different role or location." });
+    res.json(all);
   } catch (error) {
     console.error("❌ Job search error:", error.message);
-    res.json(REALISTIC_JOBS.slice(0, 6));
+    res.status(500).json({ error: error.message });
   }
 });
 
